@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <vector>
 #include <tchar.h>
-#include <hash_map>
+#define _MBCS
+#include <string>
+#include <map>
 
 constexpr double CompareError = 1e-3;
 inline bool CompareFloats(const double& x, const double& y);
@@ -21,7 +23,7 @@ namespace namespace_json_ {
 	public:
 		const VALUE_TYPE type;
 	protected:
-		JSONValue(VALUE_TYPE type);
+		JSONValue(VALUE_TYPE type) noexcept;
 	public:
 		virtual JSONValue* Clone() const = 0;
 		virtual bool Equal(JSONValue* o) const = 0;
@@ -36,14 +38,14 @@ namespace namespace_json_ {
 		};
 	public:
 		JSONNumber() = delete;
-		JSONNumber(const double& v);
-		JSONNumber(const int& v);
-		JSONNumber(const JSONNumber& o);
+		JSONNumber(const double& v) noexcept;
+		JSONNumber(const int& v) noexcept;
+		JSONNumber(const JSONNumber& o) noexcept;
 		JSONNumber(JSONNumber&&) = delete;
 
-		void Put(const double& v);
-		void Put(const int& v);
-		bool IsFloating() const;
+		void Put(const double& v) noexcept;
+		void Put(const int& v) noexcept;
+		bool IsFloating() const noexcept;
 		double GetAsFloat() const;
 		int GetAsInt() const;
 
@@ -52,17 +54,17 @@ namespace namespace_json_ {
 	};
 
 	class JSONString : public JSONValue {
-		TCHAR* szStr;
+		char* szStr;
 		size_t length;
 	public:
 		JSONString() = delete;
-		JSONString(const TCHAR* str);
+		JSONString(const char* str);
 		JSONString(const JSONString& o);
 		JSONString(JSONString&&) = delete;
 		~JSONString();
 
-		void Put(const TCHAR* str);
-		const TCHAR* Get() const;
+		void Put(const char* str);
+		const char* Get() const;
 		size_t Length() const;
 
 		virtual bool Equal(JSONValue* o) const;
@@ -73,8 +75,8 @@ namespace namespace_json_ {
 		bool value;
 	public:
 		JSONBoolean() = delete;
-		JSONBoolean(const bool& v);
-		JSONBoolean(const JSONBoolean& o);
+		JSONBoolean(const bool& v) noexcept;
+		JSONBoolean(const JSONBoolean& o) noexcept;
 		JSONBoolean(JSONBoolean&&) = delete;
 
 		virtual bool Equal(JSONValue* o) const;
@@ -99,7 +101,7 @@ namespace namespace_json_ {
 
 	class JSONNull : public JSONValue {
 	public:
-		JSONNull();
+		JSONNull() noexcept;
 		JSONNull(const JSONNull&) = delete;
 		JSONNull(JSONNull&&) = delete;
 
@@ -108,17 +110,24 @@ namespace namespace_json_ {
 	};
 
 	class JSONObject : public JSONValue {
-		std::hash_map<std::string, JSONValue*> properties;
+		std::map<std::string, JSONValue*> properties;
 	public:
 		JSONObject();
 		JSONObject(const JSONObject& o);
 		JSONObject(JSONObject&&) = delete;
 		~JSONObject();
 
-		bool Has(const std::string& key);
+		void Put(const std::string& key, JSONValue* v);
+		bool Has(const std::string& key) const;
 		JSONValue* Get(const std::string& key) const;
 
 		virtual bool Equal(JSONValue* o) const;
 		virtual JSONValue* Clone() const;
 	};
+
+	JSONObject* ParseObject(char* buffer, char*& next);
+	JSONString* ParseString(char* buffer, char*& next);
+	JSONNumber* ParseNumber(char* buffer, char*& next);
+	JSONArray* ParseArray(char* buffer, char*& next);
+	JSONValue* ParseBN(char* buffer, char*& next);
 }

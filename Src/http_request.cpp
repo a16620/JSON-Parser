@@ -70,6 +70,11 @@ std::unique_ptr<char, std::function<void(char*)>> http_request::Fetch(const stri
 {
 	auto s = MakeConnection(host);
 	std::unordered_map<std::string, std::string> additionalHeader;
+	additionalHeader = {
+		{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36"},
+		{"Accept", "text/html,application/xhtml+xml,application/xml;\ q=0.9,imgwebp,*/*;q=0.8"},
+		{"Host", host}
+	};
 	SendRequest(s, uri, additionalHeader);
 
 	int rb;
@@ -77,7 +82,8 @@ std::unique_ptr<char, std::function<void(char*)>> http_request::Fetch(const stri
 	ostringstream oss;
 	do {
 		rb = recv(s, temp, 512, 0);
-		oss.write(temp, rb);
+		if (rb > 0)
+			oss.write(temp, rb);
 	} while (rb == 512);
 
 	if (rb == -1) {
@@ -266,14 +272,4 @@ size_t http_request::SendRequest(SOCKET ss, const std::string& uri, const std::u
 	} while (len > sentbytes);
 
 	return sentbytes;
-}
-
-int main() {
-	WSADATA wsa;
-	WSAStartup(MAKEWORD(2, 2), &wsa);
-	
-	auto r=make_request("").get();
-	cout << r.content;
-	WSACleanup();
-	return 0;
 }

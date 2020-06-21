@@ -1,20 +1,14 @@
 #include "http_request.h"
 #include <iostream>
+#include <sstream>
+#include <mutex>
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace http_request;
 using namespace std;
 
-const auto ArrayDeleter = [](char* ptr) { delete[] ptr; };
-
-http_request::ThreadPool::ThreadPool(size_t count) : count(count)
-{
-	if (count == 0) {
-		throw runtime_error("Pool must have more than one thread");
-	}
-
-	//for (count)
-}
+template<class T>
+const auto ArrayDeleter = [](T* ptr) { delete[] ptr; };
 
 string ReadLine(const char* buffer, size_t& length)
 {
@@ -28,20 +22,77 @@ string ReadLine(const char* buffer, size_t& length)
 
 std::future<HTTPRespond> http_request::make_request(const string& url, ThreadPool* pool)
 {
+	const auto request_func = [](string host, string uri) {
+		std::unique_ptr<char, std::function<void(char*)>> result = move(Fetch(host, uri));
+		return ParseHTTP(result.get());
+	};
+	
+	string host, uri;
+	size_t ofs = url.find("://");
+	if (ofs != string::npos)
+	{
+		auto endHost = url.find_first_of('/', ofs + 3);
+		if (endHost == string::npos)
+		{
+			host = url.substr(ofs + 3);
+			uri = '/';
+		}
+		else
+		{
+			host = url.substr(ofs + 3, endHost - (ofs + 3));
+			uri = url.substr(endHost);
+		}
+	}
+	else
+	{
+		auto endHost = url.find_first_of('/');
+		if (endHost == string::npos)
+		{
+			host = url;
+			uri = '/';
+		}
+		else
+		{
+			host = url.substr(0, endHost);
+			uri = url.substr(endHost);
+		}
+	}
+
 	if (pool == nullptr)
 	{
-		//async()
+		return async(request_func, host, uri);
 	}
-	return std::future<HTTPRespond>();
+
+	return pool->EnqueueTask(request_func, host, uri);
 }
 
 std::unique_ptr<char, std::function<void(char*)>> http_request::Fetch(const string& host, const string& uri)
 {
 	auto s = MakeConnection(host);
+	std::unordered_map<std::string, std::string> additionalHeader;
+	SendRequest(s, uri, additionalHeader);
 
+	int rb;
+	char temp[512];
+	ostringstream oss;
+	while ((rb = recv(s, temp, 512, 0)) > 0) {
+		oss.write(temp, rb);
+	}
+	if (rb == -1) {
+		string msg("가져오지 못했습니다 #");
+		msg += std::to_string(WSAGetLastError());
+		throw runtime_error(msg);
+	}
 	
+	string str = oss.str();
+	if (str.empty())
+		throw runtime_error("아무것도 받지 못했습니다");
 
-	std::unique_ptr<char, std::function<void(char*)>> buffer(nullptr, ArrayDeleter);
+	const auto&& length = str.size();
+	std::unique_ptr<char, std::function<void(char*)>> buffer(new char[length+1], ArrayDeleter<char>);
+	memcpy(buffer.get(), str.c_str(), length);
+	buffer.get()[length] = '\0';
+
 	return buffer;
 }
 
@@ -52,7 +103,7 @@ HTTPRespond http_request::ParseHTTP(const char* buffer)
 
 	auto endHead = strstr(buffer, "\r\n\r\n");
 	if (endHead == NULL)
-		throw runtime_error("미완성 헤더입니다");
+		throw out_of_range("미완성 헤더입니다");
 
 	size_t n;
 	string line = ReadLine(buffer, n);
@@ -61,13 +112,13 @@ HTTPRespond http_request::ParseHTTP(const char* buffer)
 	{
 		auto idx = line.find_first_of(' '), bg = 0U;
 		if (idx == string::npos)
-			throw runtime_error("미완성 헤더입니다");
+			throw out_of_range("미완성 헤더입니다");
 		respond.version = line.substr(0, idx);
 
 		bg = idx+1;
 		idx = line.find_first_of(' ', bg);
 		if (idx == string::npos)
-			throw runtime_error("미완성 헤더입니다");
+			throw out_of_range("미완성 헤더입니다");
 		auto szCode = line.substr(bg, idx-bg);
 		respond.code = std::stoi(szCode);
 
@@ -180,16 +231,46 @@ ENDERROR:
 	return addresses;
 }
 
+size_t http_request::SendRequest(SOCKET ss, const std::string& uri, const std::unordered_map<std::string, std::string>& header)
+{
+	ostringstream context;
+	context << "GET " << uri << " HTTP/1.1" << "\r\n";
+	for (auto pair : header)
+	{
+		context << pair.first << ": " << pair.second << "\r\n";
+	}
+	context << "\r\n";
+	string full = context.str();
+	auto const raw = full.c_str();
+	const size_t len = full.size();
+	size_t sentbytes = 0;
+	const size_t dataUnit = 512;
+
+	do {
+		size_t t = 0;
+		if (len - sentbytes > dataUnit)
+			t = send(ss, raw + sentbytes, dataUnit, 0);
+		else
+			t = send(ss, raw + sentbytes, len - sentbytes, 0);
+
+		if (t == -1)
+		{
+			string msg("전송 실패 #");
+			msg += std::to_string(WSAGetLastError());
+			throw runtime_error(msg);
+		}
+		sentbytes += t;
+	} while (len > sentbytes);
+
+	return sentbytes;
+}
+
 int main() {
 	WSADATA wsa;
 	WSAStartup(MAKEWORD(2, 2), &wsa);
-	auto r= DNSLookup("www.google.com");
-	for (auto e : r)
-	{
-		in_addr a;
-		a.s_addr = e;
-		cout << inet_ntoa(a) << endl;
-	}
+	
+
+
 	WSACleanup();
 	return 0;
 }

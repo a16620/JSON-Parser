@@ -14,6 +14,7 @@ namespace http_request {
 		int code=0;
 		std::string respondMessage, version, content;
 		std::unordered_map<std::string, std::string> header;
+		bool headerOnly = false;
 	};
 
 	class ThreadPool {

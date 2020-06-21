@@ -75,9 +75,11 @@ std::unique_ptr<char, std::function<void(char*)>> http_request::Fetch(const stri
 	int rb;
 	char temp[512];
 	ostringstream oss;
-	while ((rb = recv(s, temp, 512, 0)) > 0) {
+	do {
+		rb = recv(s, temp, 512, 0);
 		oss.write(temp, rb);
-	}
+	} while (rb == 512);
+
 	if (rb == -1) {
 		string msg("가져오지 못했습니다 #");
 		msg += std::to_string(WSAGetLastError());
@@ -100,11 +102,12 @@ HTTPRespond http_request::ParseHTTP(const char* buffer)
 {
 	HTTPRespond respond;
 
-
 	auto endHead = strstr(buffer, "\r\n\r\n");
 	if (endHead == NULL)
-		throw out_of_range("미완성 헤더입니다");
-
+	{
+		respond.headerOnly = true;
+		endHead = buffer + strlen(buffer);//헤더만 존재 //throw out_of_range("미완성 헤더입니다");
+	}
 	size_t n;
 	string line = ReadLine(buffer, n);
 	buffer += n + 2;
@@ -269,8 +272,8 @@ int main() {
 	WSADATA wsa;
 	WSAStartup(MAKEWORD(2, 2), &wsa);
 	
-
-
+	auto r=make_request("").get();
+	cout << r.content;
 	WSACleanup();
 	return 0;
 }

@@ -1,4 +1,5 @@
 #pragma once
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <WinSock2.h>
 #include <string>
 #include <unordered_map>
@@ -7,10 +8,6 @@
 #include <future>
 
 namespace http_request {
-	enum class Method {
-
-	};
-
 	struct HTTPRespond {
 		int code;
 		std::string respondMessage, version, content;
@@ -36,7 +33,12 @@ namespace http_request {
 		ThreadPool(size_t count);
 	};
 
-	std::future<HTTPRespond> make_request(std::string url, ThreadPool* pool=nullptr);
+	std::future<HTTPRespond> make_request(const std::string& url, ThreadPool* pool=nullptr);
+	
+	std::unique_ptr<char, std::function<void(char*)>> Fetch(const std::string& host, const std::string& uri);
 	HTTPRespond ParseHTTP(const char* buffer);
 	std::string ltrim(std::string o);
+
+	SOCKET MakeConnection(std::string host);
+	std::vector<ULONG> DNSLookup(const std::string& host);
 }

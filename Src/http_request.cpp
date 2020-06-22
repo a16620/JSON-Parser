@@ -27,6 +27,9 @@ std::future<HTTPRespond> http_request::make_request(const string& url, ThreadPoo
 		return ParseHTTP(result.get());
 	};
 	
+	if (url.empty())
+		throw invalid_argument("URLì´ ë¹ˆ ë¬¸ìì—´ì…ë‹ˆë‹¤");
+
 	string host, uri;
 	size_t ofs = url.find("://");
 	if (ofs != string::npos)
@@ -87,14 +90,14 @@ std::unique_ptr<char, std::function<void(char*)>> http_request::Fetch(const stri
 	} while (rb == 512);
 
 	if (rb == -1) {
-		string msg("°¡Á®¿ÀÁö ¸øÇß½À´Ï´Ù #");
+		string msg("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ß½ï¿½ï¿½Ï´ï¿½ #");
 		msg += std::to_string(WSAGetLastError());
 		throw runtime_error(msg);
 	}
 	
 	string str = oss.str();
 	if (str.empty())
-		throw runtime_error("¾Æ¹«°Íµµ ¹ŞÁö ¸øÇß½À´Ï´Ù");
+		throw runtime_error("ï¿½Æ¹ï¿½ï¿½Íµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ß½ï¿½ï¿½Ï´ï¿½");
 
 	const auto&& length = str.size();
 	std::unique_ptr<char, std::function<void(char*)>> buffer(new char[length+1], ArrayDeleter<char>);
@@ -112,7 +115,7 @@ HTTPRespond http_request::ParseHTTP(const char* buffer)
 	if (endHead == NULL)
 	{
 		respond.headerOnly = true;
-		endHead = buffer + strlen(buffer);//Çì´õ¸¸ Á¸Àç //throw out_of_range("¹Ì¿Ï¼º Çì´õÀÔ´Ï´Ù");
+		endHead = buffer + strlen(buffer);//ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ //throw out_of_range("ï¿½Ì¿Ï¼ï¿½ ï¿½ï¿½ï¿½ï¿½Ô´Ï´ï¿½");
 	}
 	size_t n;
 	string line = ReadLine(buffer, n);
@@ -121,13 +124,13 @@ HTTPRespond http_request::ParseHTTP(const char* buffer)
 	{
 		auto idx = line.find_first_of(' '), bg = 0U;
 		if (idx == string::npos)
-			throw out_of_range("¹Ì¿Ï¼º Çì´õÀÔ´Ï´Ù");
+			throw out_of_range("ï¿½Ì¿Ï¼ï¿½ ï¿½ï¿½ï¿½ï¿½Ô´Ï´ï¿½");
 		respond.version = line.substr(0, idx);
 
 		bg = idx+1;
 		idx = line.find_first_of(' ', bg);
 		if (idx == string::npos)
-			throw out_of_range("¹Ì¿Ï¼º Çì´õÀÔ´Ï´Ù");
+			throw out_of_range("ï¿½Ì¿Ï¼ï¿½ ï¿½ï¿½ï¿½ï¿½Ô´Ï´ï¿½");
 		auto szCode = line.substr(bg, idx-bg);
 		respond.code = std::stoi(szCode);
 
@@ -172,17 +175,17 @@ SOCKET http_request::MakeConnection(string host)
 		}
 		catch (exception e)
 		{
-			throw runtime_error("Æ÷Æ® ¹øÈ£¸¦ º¯È¯ÇÒ ¼ö ¾ø½À´Ï´Ù");
+			throw runtime_error("ï¿½ï¿½Æ® ï¿½ï¿½È£ï¿½ï¿½ ï¿½ï¿½È¯ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½");
 		}
 		if (tport > USHRT_MAX || tport < 0)
-			throw runtime_error("Æ÷Æ® ¹øÈ£°¡ ºñÁ¤»óÀûÀÔ´Ï´Ù");
+			throw runtime_error("ï¿½ï¿½Æ® ï¿½ï¿½È£ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´Ï´ï¿½");
 		port = static_cast<USHORT>(tport);
 		host.erase(pidx);
 	}
 
 	auto results = DNSLookup(host);
 	if (results.empty())
-		throw runtime_error("È£½ºÆ®¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù");
+		throw runtime_error("È£ï¿½ï¿½Æ®ï¿½ï¿½ Ã£ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½");
 
 	ULONG ipAddress = results[0];
 	sockaddr_in address;
@@ -193,11 +196,11 @@ SOCKET http_request::MakeConnection(string host)
 
 	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (s == INVALID_SOCKET)
-		throw runtime_error("¼ÒÄÏÀ» »ı¼ºÇÏÁö ¸øÇß½À´Ï´Ù");
+		throw runtime_error("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ß½ï¿½ï¿½Ï´ï¿½");
 
 	if (connect(s, reinterpret_cast<sockaddr*>(&address), sizeof sockaddr_in) == SOCKET_ERROR)
 	{
-		string msg = "¿¬°á ½ÇÆĞ #";
+		string msg = "ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ #";
 		msg += std::to_string(WSAGetLastError());
 		throw runtime_error(msg);
 	}
@@ -224,7 +227,7 @@ vector<ULONG> http_request::DNSLookup(const string& host)
 			} while ((err = WSAGetLastError()) == WSATRY_AGAIN);
 		}
 
-		string msg = "ÁÖ¼Ò¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù #";
+		string msg = "ï¿½Ö¼Ò¸ï¿½ Ã£ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ #";
 		msg += std::to_string(err);
 		throw runtime_error(msg);
 	}
@@ -264,7 +267,7 @@ size_t http_request::SendRequest(SOCKET ss, const std::string& uri, const std::u
 
 		if (t == -1)
 		{
-			string msg("Àü¼Û ½ÇÆĞ #");
+			string msg("ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ #");
 			msg += std::to_string(WSAGetLastError());
 			throw runtime_error(msg);
 		}

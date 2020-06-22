@@ -14,7 +14,11 @@ string ReadLine(const char* buffer, size_t& length)
 {
 	auto end = strstr(buffer, "\r\n");
 	if (end == NULL)
-		return string(buffer);
+	{
+		auto str = string(buffer);
+		length = str.size();
+		return str;
+	}
 	size_t&& len = end - buffer;
 	length = len;
 	return string(buffer, len);

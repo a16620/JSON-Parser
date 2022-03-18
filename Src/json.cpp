@@ -559,7 +559,7 @@ JSONArray* namespace_json_::ParseArray(char* buffer, char*& next)
 
 	}
 	
-	next = buffer;
+	next = buffer+1;
 	return obj;
 }
 

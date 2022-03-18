@@ -28,7 +28,7 @@ JSONValue* JSONArray::At(const size_t& i)
 
 void JSONArray::Append(JSONValue* item)
 {
-	elements.push_back(item->Clone());
+	elements.push_back(item);
 }
 
 void JSONArray::Remove(JSONValue* item)
@@ -46,6 +46,9 @@ void JSONArray::Remove(JSONValue* item)
 
 void JSONArray::Clear()
 {
+    for (auto e : elements) {
+        delete e;
+    }
 	elements.clear();
 }
 
@@ -76,7 +79,7 @@ JSONValue* JSONArray::Clone() const
 {
 	JSONArray* array = new JSONArray();
 	for (auto e : elements) {
-		array->Append(e);
+		array->Append(e->Clone());
 	}
 	return array;
 }
@@ -96,12 +99,12 @@ JSONValue::JSONValue(VALUE_TYPE type) noexcept : type(type)
 JSONString::JSONString(const char* str) : JSONValue(VALUE_TYPE::STRING)
 {
 	if (str == nullptr)
-		throw std::runtime_error("¹®ÀÚ¿­ÀÌ NULLÀ» °¡¸£Åµ´Ï´Ù");
+		throw std::runtime_error("ë¬¸ìì—´ì´ NULLì„ ê°€ë¥´í‚µë‹ˆë‹¤");
 	length = strlen(str);
 	char* szCopied = new char[length+1];
 	if (strcpy_s(szCopied, length+1, str) != 0) {
 		delete[] szCopied;
-		throw std::runtime_error("¹®ÀÚ¿­ º¹»ç ½ÇÆĞ");
+		throw std::runtime_error("ë¬¸ìì—´ ë³µì‚¬ ì‹¤íŒ¨");
 	}
 	szCopied[length] = '\0';
 	szStr = szCopied;
@@ -113,7 +116,7 @@ JSONString::JSONString(const JSONString& o) : JSONValue(VALUE_TYPE::STRING)
 	char* szCopied = new char[length + 1];
 	if (strcpy_s(szCopied, length+1, o.szStr) != 0) {
 		delete[] szCopied;
-		throw std::runtime_error("¹®ÀÚ¿­ º¹»ç ½ÇÆĞ");
+		throw std::runtime_error("ë¬¸ìì—´ ë³µì‚¬ ì‹¤íŒ¨");
 	}
 	szCopied[length] = '\0';
 	szStr = szCopied;
@@ -128,12 +131,12 @@ void JSONString::Put(const char* str)
 {
 
 	if (str == nullptr)
-		throw std::runtime_error("¹®ÀÚ¿­ÀÌ NULLÀ» °¡¸£Åµ´Ï´Ù");
+		throw std::runtime_error("ë¬¸ìì—´ì´ NULLì„ ê°€ë¥´í‚µë‹ˆë‹¤");
 	length = strlen(str);
 	char* szCopied = new char[length + 1];
 	if (strcpy_s(szCopied, length, str) != 0) {
 		delete[] szCopied;
-		throw std::runtime_error("¹®ÀÚ¿­ º¹»ç ½ÇÆĞ");
+		throw std::runtime_error("ë¬¸ìì—´ ë³µì‚¬ ì‹¤íŒ¨");
 	}
 	szCopied[length] = '\0';
 	delete[] szStr;
@@ -288,8 +291,8 @@ JSONObject::JSONObject() : JSONValue(VALUE_TYPE::OBJECT)
 JSONObject::JSONObject(const JSONObject& o) : JSONValue(VALUE_TYPE::OBJECT)
 {
 	for (auto it : o.properties) {
-		it.second = it.second->Clone();
-		properties.insert(it);
+        auto pair = make_pair(it.first, it.second->Clone());
+		properties.insert(pair);
 	}
 }
 

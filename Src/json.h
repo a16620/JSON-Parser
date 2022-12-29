@@ -25,6 +25,7 @@ namespace namespace_json_ {
 	protected:
 		JSONValue(VALUE_TYPE type) noexcept;
 	public:
+		virtual std::string Repr() const = 0;
 		virtual JSONValue* Clone() const = 0;
 		virtual bool Equal(JSONValue* o) const = 0;
 		virtual ~JSONValue() {}
@@ -49,13 +50,12 @@ namespace namespace_json_ {
 		double GetAsFloat() const;
 		int GetAsInt() const;
 
+		std::string Repr() const override;
 		virtual bool Equal(JSONValue* o) const;
 		virtual JSONValue* Clone() const;
 	};
 
-	class JSONString : public JSONValue {
-		char* szStr;
-		size_t length;
+	class JSONString : public JSONValue, public std::string {
 	public:
 		JSONString() = delete;
 		JSONString(const char* str);
@@ -63,10 +63,13 @@ namespace namespace_json_ {
 		JSONString(JSONString&&) = delete;
 		~JSONString();
 
-		void Put(const char* str);
-		const char* Get() const;
-		size_t Length() const;
+		using std::string::operator=;
+		using std::string::operator+=;
+		using std::string::operator[];
 
+		void Put(const char* str); //Use *ptr = ~
+
+		std::string Repr() const override;
 		virtual bool Equal(JSONValue* o) const;
 		virtual JSONValue* Clone() const;
 	};
@@ -79,24 +82,25 @@ namespace namespace_json_ {
 		JSONBoolean(const JSONBoolean& o) noexcept;
 		JSONBoolean(JSONBoolean&&) = delete;
 
-		virtual bool Equal(JSONValue* o) const;
-		virtual JSONValue* Clone() const;
+		std::string Repr() const override;
+		bool Equal(JSONValue* o) const override;
+		JSONValue* Clone() const override;
 	};
 
-	class JSONArray : public JSONValue {
-		std::vector<JSONValue*> elements;
+	class JSONArray : public JSONValue, public std::vector<JSONValue*> {
 	public:
 		JSONArray();
 		~JSONArray();
 
-		JSONValue* At(const size_t& i);
-		void Append(JSONValue* item);
-		void Remove(JSONValue* item);
-		void Clear();
-		size_t Count() const;
 
-		virtual bool Equal(JSONValue* o) const;
-		virtual JSONValue* Clone() const;
+		using std::vector<JSONValue*>::operator[];
+		void Remove(JSONValue* item);
+		void Remove(const JSONValue& value);
+
+
+		std::string Repr() const override;
+		bool Equal(JSONValue* o) const override;
+		JSONValue* Clone() const override;
 	};
 
 	class JSONNull : public JSONValue {
@@ -105,12 +109,12 @@ namespace namespace_json_ {
 		JSONNull(const JSONNull&) = delete;
 		JSONNull(JSONNull&&) = delete;
 
-		virtual bool Equal(JSONValue* o) const;
-		virtual JSONValue* Clone() const;
+		std::string Repr() const override;
+		bool Equal(JSONValue* o) const override;
+		JSONValue* Clone() const override;
 	};
 
-	class JSONObject : public JSONValue {
-		std::map<std::string, JSONValue*> properties;
+	class JSONObject : public JSONValue, public std::map<std::string, JSONValue*> {
 	public:
 		JSONObject();
 		JSONObject(const JSONObject& o);
@@ -119,10 +123,10 @@ namespace namespace_json_ {
 
 		void Put(const std::string& key, JSONValue* v);
 		bool Has(const std::string& key) const;
-		JSONValue* Get(const std::string& key) const;
 
-		virtual bool Equal(JSONValue* o) const;
-		virtual JSONValue* Clone() const;
+		std::string Repr() const override;
+		bool Equal(JSONValue* o) const override;
+		JSONValue* Clone() const override;
 	};
 
 	JSONObject* ParseObject(char* buffer, char*& next);

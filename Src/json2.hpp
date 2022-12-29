@@ -471,6 +471,9 @@ namespace namespace_json_2 {
 				case 't':
 					c = '\t';
 					break;
+				case 'u':
+					str.push_back('\\');
+					break;
 				}
 				str.push_back(c);
 				escaping = false;

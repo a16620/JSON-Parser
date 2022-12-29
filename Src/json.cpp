@@ -1,6 +1,8 @@
-#include "json.h"
+#include "git_json.h"
 #include <stdexcept>
 #include <string.h>
+#include <sstream>
+#include <algorithm>
 using namespace namespace_json_;
 using namespace std;
 
@@ -9,195 +11,86 @@ inline bool CompareFloats(const double& x, const double& y)
 	return abs(x - y) <= CompareError;
 }
 
-JSONArray::JSONArray() : JSONValue(VALUE_TYPE::ARRAY)
-{
-}
-
-JSONArray::~JSONArray()
-{
-	for (auto e : elements) {
-		delete e;
-	}
-}
-
-JSONValue* JSONArray::At(const size_t& i)
-{
-	//Out of range
-	return elements.at(i);
-}
-
-void JSONArray::Append(JSONValue* item)
-{
-	elements.push_back(item);
-}
-
-void JSONArray::Remove(JSONValue* item)
-{
-	for (auto it = elements.begin(); it != elements.end();)
-	{
-		if ((*it)->Equal(item)) {
-			delete* it;
-			elements.erase(++it);
-		}
-		else
-			++it;
-	}
-}
-
-void JSONArray::Clear()
-{
-    for (auto e : elements) {
-        delete e;
-    }
-	elements.clear();
-}
-
-size_t JSONArray::Count() const
-{
-	return elements.size();
-}
-
-bool JSONArray::Equal(JSONValue* o) const
-{
-	if (this == o)
-		return true;
-	if (type != o->type)
-		return false;
-	auto O = reinterpret_cast<JSONArray*>(o);
-	const size_t length = Count();
-	if (length != O->Count())
-		return false;
-
-	for (size_t i = 0; i < length; ++i) {
-		if (!elements[i]->Equal(O->elements[i]))
-			return false;
-	}
-	return true;
-}
-
-JSONValue* JSONArray::Clone() const
-{
-	JSONArray* array = new JSONArray();
-	for (auto e : elements) {
-		array->Append(e->Clone());
-	}
-	return array;
-}
-
 JSONValue::JSONValue(VALUE_TYPE type) noexcept : type(type)
 {
 }
 
-/*bool namespace_json_::JSONValue::Equal(JSONValue* o) const
+JSONString::JSONString(const char* str) : JSONValue(VALUE_TYPE::STRING), std::string(str)
 {
-	if (this == o)
+}
+
+JSONString::JSONString(const JSONString& o) : JSONValue(VALUE_TYPE::STRING), std::string(o)
+{
+}
+
+namespace_json_::JSONString::~JSONString()
+{
+}
+
+void namespace_json_::JSONString::Put(const char* str)
+{
+	*this = str;
+}
+
+std::string namespace_json_::JSONString::Repr() const
+{
+	return std::string();
+}
+
+bool namespace_json_::JSONString::Equal(JSONValue* o) const
+{
+	if (o == this) {
 		return true;
-	if (type != o->type)
-		return false;
-}*/
-
-JSONString::JSONString(const char* str) : JSONValue(VALUE_TYPE::STRING)
-{
-	if (str == nullptr)
-		throw std::runtime_error("문자열이 NULL을 가르킵니다");
-	length = strlen(str);
-	char* szCopied = new char[length+1];
-	if (strcpy_s(szCopied, length+1, str) != 0) {
-		delete[] szCopied;
-		throw std::runtime_error("문자열 복사 실패");
 	}
-	szCopied[length] = '\0';
-	szStr = szCopied;
-}
-
-JSONString::JSONString(const JSONString& o) : JSONValue(VALUE_TYPE::STRING)
-{
-	length = o.length;
-	char* szCopied = new char[length + 1];
-	if (strcpy_s(szCopied, length+1, o.szStr) != 0) {
-		delete[] szCopied;
-		throw std::runtime_error("문자열 복사 실패");
-	}
-	szCopied[length] = '\0';
-	szStr = szCopied;
-}
-
-JSONString::~JSONString()
-{
-	delete[] szStr;
-}
-
-void JSONString::Put(const char* str)
-{
-
-	if (str == nullptr)
-		throw std::runtime_error("문자열이 NULL을 가르킵니다");
-	length = strlen(str);
-	char* szCopied = new char[length + 1];
-	if (strcpy_s(szCopied, length, str) != 0) {
-		delete[] szCopied;
-		throw std::runtime_error("문자열 복사 실패");
-	}
-	szCopied[length] = '\0';
-	delete[] szStr;
-	szStr = szCopied;
-}
-
-const char* JSONString::Get() const
-{
-	return szStr;
-}
-
-size_t JSONString::Length() const
-{
-	return length;
-}
-
-bool JSONString::Equal(JSONValue* o) const
-{
-	if (this == o)
-		return true;
-	if (type != o->type)
+	else if (o->type != this->type) {
 		return false;
+	}
 
-	auto O = reinterpret_cast<JSONString*>(o);
-	if (length != O->length)
-		return false;
-	return strcmp(szStr, O->szStr) == 0;
+	return *static_cast<JSONString*>(o) == *this; //std::string compare
 }
 
-JSONValue* JSONString::Clone() const
+JSONValue* namespace_json_::JSONString::Clone() const
 {
 	return new JSONString(*this);
 }
 
-JSONBoolean::JSONBoolean(const bool& v) noexcept : JSONValue(VALUE_TYPE::BOOLEAN)
+JSONBoolean::JSONBoolean(const bool& v) noexcept : JSONValue(VALUE_TYPE::BOOLEAN), value{ v }
 {
-	value = v;
 }
 
-JSONBoolean::JSONBoolean(const JSONBoolean& o) noexcept : JSONValue(VALUE_TYPE::BOOLEAN)
+JSONBoolean::JSONBoolean(const JSONBoolean& o) noexcept : JSONValue(VALUE_TYPE::BOOLEAN), value{o.value}
 {
-	value = o.value;
 }
 
-bool JSONBoolean::Equal(JSONValue* o) const
+std::string namespace_json_::JSONBoolean::Repr() const
 {
-	if (this == o)
+	return value ? "true" : "false";
+}
+
+bool namespace_json_::JSONBoolean::Equal(JSONValue* o) const
+{
+	if (o == this) {
 		return true;
-	if (type != o->type)
+	}
+	else if (o->type != this->type) {
 		return false;
+	}
 
-	return value == reinterpret_cast<JSONBoolean*>(o)->value;
+	return value == static_cast<JSONBoolean*>(o)->value;
 }
 
-JSONValue* JSONBoolean::Clone() const
+JSONValue* namespace_json_::JSONBoolean::Clone() const
 {
 	return new JSONBoolean(*this);
 }
 
-JSONNull::JSONNull() noexcept : JSONValue(VALUE_TYPE::JNULL)
+namespace_json_::JSONNull::JSONNull() noexcept : JSONValue(VALUE_TYPE::JNULL)
 {
+}
+
+std::string namespace_json_::JSONNull::Repr() const
+{
+	return "null";
 }
 
 bool JSONNull::Equal(JSONValue* o) const
@@ -227,9 +120,8 @@ JSONNumber::JSONNumber(const int& v) noexcept : JSONValue(VALUE_TYPE::NUMBER)
 	iVal = v;
 }
 
-JSONNumber::JSONNumber(const JSONNumber& o) noexcept : JSONValue(VALUE_TYPE::NUMBER)
+JSONNumber::JSONNumber(const JSONNumber& o) noexcept : JSONValue(VALUE_TYPE::NUMBER), isFloating{o.isFloating}
 {
-	isFloating = o.isFloating;
 	if (isFloating) {
 		fVal = o.fVal;
 	}
@@ -269,17 +161,29 @@ int JSONNumber::GetAsInt() const
 	return iVal;
 }
 
-bool JSONNumber::Equal(JSONValue* o) const
+std::string namespace_json_::JSONNumber::Repr() const
 {
-	if (this == o)
-		return true;
-	if (type != o->type)
-		return false;
-
-	return CompareFloats(GetAsFloat(), reinterpret_cast<JSONNumber*>(o)->GetAsFloat());
+	return isFloating ? std::to_string(fVal) : std::to_string(iVal);
 }
 
-JSONValue* JSONNumber::Clone() const
+bool namespace_json_::JSONNumber::Equal(JSONValue* o) const
+{
+	if (o == this) {
+		return true;
+	}
+	else if (o->type != this->type) {
+		return false;
+	}
+
+	auto n = reinterpret_cast<JSONNumber*>(o);
+	if (n->isFloating || isFloating) {
+		return CompareFloats(n->GetAsFloat(), GetAsFloat());
+	}
+
+	return n->iVal == iVal;
+}
+
+JSONValue* namespace_json_::JSONNumber::Clone() const
 {
 	return new JSONNumber(*this);
 }
@@ -290,55 +194,71 @@ JSONObject::JSONObject() : JSONValue(VALUE_TYPE::OBJECT)
 
 JSONObject::JSONObject(const JSONObject& o) : JSONValue(VALUE_TYPE::OBJECT)
 {
-	for (auto it : o.properties) {
-        auto pair = make_pair(it.first, it.second->Clone());
-		properties.insert(pair);
+	for (auto it : o) {
+		auto pair = make_pair(it.first, it.second->Clone());
+		insert(pair);
 	}
 }
 
 JSONObject::~JSONObject()
 {
-	for (auto it : properties) {
+	for (auto it : *this) {
 		delete it.second;
 	}
 }
 
 void namespace_json_::JSONObject::Put(const std::string& key, JSONValue* v)
 {
-	auto it = properties.find(key);
-	if (it != properties.end())
+	auto it = find(key);
+	if (it == end())
 	{
-		delete it->second;
+		insert(std::make_pair(key, v));
 	}
-	properties.insert(make_pair(key, v));
+	else {
+		delete it->second;
+		it->second = v;
+	}
 }
 
-bool JSONObject::Has(const std::string& key) const
+bool namespace_json_::JSONObject::Has(const std::string& key) const
 {
-	return properties.find(key) != properties.end();
+	return count(key);
 }
 
-JSONValue* JSONObject::Get(const std::string& key) const
+std::string namespace_json_::JSONObject::Repr() const
 {
-	auto it = properties.find(key);
-	if (it == properties.end())
-		return nullptr;
-	return it->second;
+	if (empty()) {
+		return "{}";
+	}
+	const std::string sep = ", ";
+	std::ostringstream rep;
+	auto it = cbegin(), end = this->cend();
+	rep << '{' << (it->first) << ':' << it->second->Repr(); //escape 필요
+	for (; it != end; ++it) {
+		rep << sep << (it->first) << ':' << it->second->Repr(); //escape 필요
+	}
+	rep << '}';
+	return rep.str();
 }
 
-bool JSONObject::Equal(JSONValue* o) const
+bool namespace_json_::JSONObject::Equal(JSONValue* o) const
 {
-	if (this == o)
+	if (o == this) {
 		return true;
-	if (type != o->type)
+	}
+	else if (o->type != this->type) {
 		return false;
-	
-	auto O = reinterpret_cast<JSONObject*>(o);
-	if (properties.size() != O->properties.size())
-		return false;
-	//TODO : Compare key, value
+	}
 
-	return false;
+	auto O = static_cast<JSONObject*>(o);
+	if (O->size() != size()) {
+		return false;
+	}
+
+	const auto compare_pair = [](value_type const& v1, value_type const& v2) {
+		return v1.first == v2.first && v1.second->Equal(v2.second);
+	};
+	return std::equal(begin(), end(), O->begin(), compare_pair);
 }
 
 JSONValue* JSONObject::Clone() const
@@ -459,7 +379,7 @@ JSONObject* namespace_json_::ParseObject(char* buffer, char*& next)
 			}
 		}
 	}
-	next = buffer+1;
+	next = buffer + 1;
 	return obj;
 }
 
@@ -486,7 +406,7 @@ JSONNumber* namespace_json_::ParseNumber(char* buffer, char*& next)
 	}
 
 	auto fi = number.find_first_of('.');
-	
+
 	if (fi != string::npos) {
 		if (fi != number.find_last_of('.')) // having two points
 			throw runtime_error("Unknown number format");
@@ -521,24 +441,24 @@ JSONArray* namespace_json_::ParseArray(char* buffer, char*& next)
 		try {
 			if (*buffer == '{') {
 				auto v = ParseObject(buffer, buffer);
-				obj->Append(v);
+				obj->push_back(v);
 			}
 			else if (*buffer == '"') {
 				auto v = ParseString(buffer + 1, buffer);
-				obj->Append(v);
+				obj->push_back(v);
 			}
 			else if (isdigit(*buffer)) {
 				auto v = ParseNumber(buffer, buffer);
-				obj->Append(v);
+				obj->push_back(v);
 			}
 			else if (*buffer == '[') {
 				auto v = ParseArray(buffer, buffer);
-				obj->Append(v);
+				obj->push_back(v);
 			}
 			else if (isalpha(*buffer))
 			{
 				auto v = ParseBN(buffer, buffer);
-				obj->Append(v);
+				obj->push_back(v);
 			}
 			else
 			{
@@ -558,8 +478,8 @@ JSONArray* namespace_json_::ParseArray(char* buffer, char*& next)
 		}
 
 	}
-	
-	next = buffer+1;
+
+	next = buffer + 1;
 	return obj;
 }
 
@@ -588,3 +508,84 @@ JSONValue* namespace_json_::ParseBN(char* buffer, char*& next)
 	return v;
 }
 
+JSONArray::JSONArray() : JSONValue(VALUE_TYPE::ARRAY)
+{
+}
+
+namespace_json_::JSONArray::~JSONArray()
+{
+	for (auto e : *this)
+	{
+		delete e;
+	}
+}
+
+void namespace_json_::JSONArray::Remove(JSONValue* item)
+{
+	auto it = find(begin(), end(), item);
+	if (it != end())
+	{
+		erase(it);
+	}
+}
+
+void JSONArray::Remove(const JSONValue& value)
+{
+	auto cmp = [&](JSONValue* item) {
+		return value.Equal(item);
+	};
+	auto it = find_if(begin(), end(), cmp);
+	if (it != end())
+	{
+		erase(it);
+	}
+}
+
+std::string JSONArray::Repr() const
+{
+	if (empty()) {
+		return "[]";
+	}
+	const std::string sep = ", ";
+	std::ostringstream rep;
+	auto it = cbegin(), end = this->cend();
+	rep << '[' << (*it++)->Repr();
+	for (; it != end; ++it) {
+		rep << sep << (*it)->Repr();
+	}
+	rep << ']';
+	return rep.str();
+}
+
+bool JSONArray::Equal(JSONValue* o) const
+{
+	if (o == this) {
+		return true;
+	}
+	else if (o->type != this->type) {
+		return false;
+	}
+
+	auto O = static_cast<JSONArray*>(o);
+	const auto size = this->size();
+	if (O->size() != size)
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < size; i++) {
+		if (this->at(i) != O->at(i)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+JSONValue* JSONArray::Clone() const
+{
+	auto o = new JSONArray();
+	for (auto e : *this) {
+		o->push_back(e->Clone());
+	}
+}

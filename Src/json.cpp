@@ -588,4 +588,5 @@ JSONValue* JSONArray::Clone() const
 	for (auto e : *this) {
 		o->push_back(e->Clone());
 	}
+	return o;
 }

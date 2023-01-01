@@ -135,7 +135,7 @@ namespace namespace_json_2 {
 		JArray() noexcept : JValue(VALUE_TYPE::ARRAY) {}
 		~JArray()
 		{
-			for (auto e : *this)
+			for (const auto& e : *this)
 			{
 				delete e;
 			}
@@ -221,7 +221,7 @@ namespace namespace_json_2 {
 		JObject(const JObject& o) : JValue(VALUE_TYPE::OBJECT) {}
 		~JObject()
 		{
-			for (auto kv : *this)
+			for (const auto& kv : *this)
 			{
 				delete kv.second;
 			}
@@ -633,21 +633,21 @@ namespace namespace_json_2 {
 				};
 				break;
 			default:
-				throw std::runtime_error("");
+				throw std::runtime_error("정의되지 않은 토큰");
 			}
 		}
 		else {
-			throw std::runtime_error("");
+			throw std::runtime_error("비정상적 종료 또는 스트림 읽기 실패");
 		}
 		
-		while (is.get(c) && std::isalpha(c)) {
+		while (is.get(c) && std::isalpha(c)) { //or std::isalnum
 			if ((*cu)[idx++] != c) { //symbol이 모두 다르기 때문에
-				throw std::runtime_error("");
+				throw std::runtime_error("매칭되는 리터럴 없음");
 			}
 		}
 
 		if (idx != cu->length()) {
-			throw std::runtime_error("");
+			throw std::runtime_error("매칭되는 리터럴 없음");
 		}
 
 		return fac();
@@ -695,5 +695,13 @@ namespace namespace_json_2 {
 	static bool CompareFloats(const JFloat& x, const JFloat& y)
 	{
 		return std::abs(x - y) < CompareError;
+	}
+
+	std::ostream& operator<<(std::ostream& os, const JValue* v) {
+		return os << v->Repr();
+	}
+
+	std::ostream& operator<<(std::ostream& os, const JValue& v) {
+		return os << v.Repr();
 	}
 }

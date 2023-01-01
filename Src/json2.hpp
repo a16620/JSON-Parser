@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdexcept>
 #include <sstream>
+#include <functional>
 #include <vector>
 #include <string>
 #include <map>
@@ -605,7 +606,51 @@ namespace namespace_json_2 {
 
 	JLiteral* JLiteral::Parse(std::istringstream& is)
 	{
-		return nullptr;
+		const std::string str_true = "true", str_false = "false", str_null = "null";
+		const std::string* cu;
+		std::function<JLiteral* (void)> fac;
+		size_t idx = 1;
+		std::istringstream::char_type c;
+		if (is.get(c))
+		{
+			switch (c) {
+			case 't':
+				cu = &str_true;
+				fac = []() {
+					return new JLiteral(true);
+				};
+				break;
+			case 'f':
+				cu = &str_false;
+				fac = []() {
+					return new JLiteral(false);
+				};
+				break;
+			case 'n':
+				cu = &str_null;
+				fac = []() {
+					return new JLiteral();
+				};
+				break;
+			default:
+				throw std::runtime_error("");
+			}
+		}
+		else {
+			throw std::runtime_error("");
+		}
+		
+		while (is.get(c) && std::isalpha(c)) {
+			if ((*cu)[idx++] != c) { //symbol이 모두 다르기 때문에
+				throw std::runtime_error("");
+			}
+		}
+
+		if (idx != cu->length()) {
+			throw std::runtime_error("");
+		}
+
+		return fac();
 	}
 
 	static std::string EscapeString(const std::string& s)

@@ -24,13 +24,28 @@ namespace namespace_json_2 {
 		JValue() = delete;
 		JValue(const JValue&) = delete;
 
-		virtual std::string Repr() const = 0;
+		std::string to_string() const
+		{
+			std::ostringstream os;
+			Repr(os);
+			return os.str();
+		}
+
+		virtual std::ostream& Repr(std::ostream& os) const = 0;
 		virtual JValue* Clone() const = 0;
 		virtual bool Equal(JValue* o) const = 0;
 		virtual ~JValue() {}
 
-		static JValue* Parse(std::istringstream& is);
+		static JValue* Parse(std::istream& is);
 	};
+
+	std::ostream& operator<<(std::ostream& os, const JValue* v) {
+		return v->Repr(os);
+	}
+
+	std::ostream& operator<<(std::ostream& os, const JValue& v) {
+		return v.Repr(os);
+	}
 
 	using JFloat = double;
 	static bool CompareFloats(const JFloat& x, const JFloat& y);
@@ -60,12 +75,10 @@ namespace namespace_json_2 {
 			return static_cast<int>(fVal);
 		}
 
-		std::string Repr() const override
+		std::ostream& Repr(std::ostream& os) const override
 		{
-			//std::to_string(fVal) 보다 형식 유지 잘됨
-			std::ostringstream oss;
-			oss << fVal;
-			return oss.str();
+			os << fVal;
+			return os;
 		}
 
 		bool Equal(JValue* o) const override
@@ -85,7 +98,7 @@ namespace namespace_json_2 {
 			return new JNumber(*this);
 		}
 
-		static JNumber* Parse(std::istringstream& is);
+		static JNumber* Parse(std::istream& is);
 	};
 
 	static std::string EscapeString(const std::string& s);
@@ -105,9 +118,9 @@ namespace namespace_json_2 {
 			static_cast<std::string*>(this)->operator=(str);
 		}
 
-		std::string Repr() const override
+		std::ostream& Repr(std::ostream& os) const override
 		{
-			return EscapeString(*this);
+			return os << EscapeString(*this);
 		}
 		bool Equal(JValue* o) const override
 		{
@@ -126,8 +139,8 @@ namespace namespace_json_2 {
 			return new JString(*this);
 		}
 
-		static JString* Parse(std::istringstream& is);
-		static std::string ParseString(std::istringstream& is);
+		static JString* Parse(std::istream& is);
+		static std::string ParseString(std::istream& is);
 	};
 
 	class JArray : public JValue, public std::vector<JValue*> {
@@ -163,20 +176,20 @@ namespace namespace_json_2 {
 			}
 		}
 
-		std::string Repr() const override
+		std::ostream& Repr(std::ostream& os) const override
 		{
 			if (empty()) {
-				return "[]";
+				os << "[]";
+				return os;
 			}
 			const std::string sep = ", ";
-			std::ostringstream rep;
 			auto it = cbegin(), end = this->cend();
-			rep << '[' << (*it++)->Repr();
+			os << '[' << (*it++);
 			for (; it != end; ++it) {
-				rep << sep << (*it)->Repr();
+				os << sep << (*it);
 			}
-			rep << ']';
-			return rep.str();
+			os << ']';
+			return os;
 		}
 		bool Equal(JValue* o) const override
 		{
@@ -212,7 +225,7 @@ namespace namespace_json_2 {
 			return o;
 		}
 
-		static JArray* Parse(std::istringstream& is);
+		static JArray* Parse(std::istream& is);
 	};
 
 	class JObject : public JValue, public std::map<std::string, JValue*> {
@@ -245,20 +258,20 @@ namespace namespace_json_2 {
 		}
 		using std::map<std::string, JValue*>::operator[];
 
-		std::string Repr() const override
+		std::ostream& Repr(std::ostream& os) const override
 		{
 			if (empty()) {
-				return "{}";
+				os << "{}";
+				return os;
 			}
 			const std::string sep = ", ";
-			std::ostringstream rep;
 			auto it = cbegin(), end = this->cend();
-			rep << '{' << EscapeString(it->first) << ':' << it->second->Repr();
+			os << '{' << EscapeString(it->first) << ':' << it->second;
 			for (; it != end; ++it) {
-				rep << sep << EscapeString(it->first) << ':' << it->second->Repr();
+				os << sep << EscapeString(it->first) << ':' << it->second;
 			}
-			rep << '}';
-			return rep.str();
+			os << '}';
+			return os;
 		}
 		bool Equal(JValue* o) const override
 		{
@@ -284,7 +297,7 @@ namespace namespace_json_2 {
 			return new JObject(*this);
 		}
 
-		static JObject* Parse(std::istringstream& is);
+		static JObject* Parse(std::istream& is);
 	};
 
 	class JLiteral : public JValue {
@@ -336,12 +349,13 @@ namespace namespace_json_2 {
 			return flag & mask_bool;
 		}
 
-		std::string Repr() const override
+		std::ostream& Repr(std::ostream& os) const override
 		{
 			if (IsNull())
-				return "null";
+				os << "null";
 			else
-				return  Bool() ? "true" : "false";
+				os <<  Bool() ? "true" : "false";
+			return os;
 		}
 		JValue* Clone() const override
 		{
@@ -354,7 +368,7 @@ namespace namespace_json_2 {
 			}
 			else if (o->type == VALUE_TYPE::STRING) {
 				auto S = static_cast<JString*>(o);
-				return this->Repr() == *static_cast<std::string*>(S);
+				return this->to_string() == *static_cast<std::string*>(S);
 			}
 			else if (o->type != VALUE_TYPE::JLITERAL) {
 				return false;
@@ -364,12 +378,12 @@ namespace namespace_json_2 {
 			return (O->IsNull() == IsNull()) && (IsNull() || O->Bool() == Bool());
 		}
 
-		static JLiteral* Parse(std::istringstream& is);
+		static JLiteral* Parse(std::istream& is);
 	};
 
-	static void SkipSpaces(std::istringstream& is)
+	static void SkipSpaces(std::istream& is)
 	{
-		std::istringstream::char_type c;
+		std::istream::char_type c;
 		while (is >> c) {
 			switch (c)
 			{
@@ -385,8 +399,10 @@ namespace namespace_json_2 {
 		}
 	}
 
-	JValue* JValue::Parse(std::istringstream& is)
+	JValue* JValue::Parse(std::istream& is)
 	{
+		SkipSpaces(is);
+
 		JValue* v = nullptr;
 		auto c = is.get();
 		is.unget();
@@ -426,7 +442,7 @@ namespace namespace_json_2 {
 		return v;
 	}
 
-	JNumber* JNumber::Parse(std::istringstream& is)
+	JNumber* JNumber::Parse(std::istream& is)
 	{
 		double d;
 		is >> d;
@@ -437,16 +453,16 @@ namespace namespace_json_2 {
 		return new JNumber(d);
 	}
 
-	JString* JString::Parse(std::istringstream& is)
+	JString* JString::Parse(std::istream& is)
 	{
 		const std::string& str = ParseString(is);
 		return new JString(str);
 	}
 
-	std::string JString::ParseString(std::istringstream& is)
+	std::string JString::ParseString(std::istream& is)
 	{
 		constexpr char escaper = '\\';
-		std::istringstream::char_type c, quot;
+		std::istream::char_type c, quot;
 		bool escaping = false;
 		is.get(quot); //single quot를 지원하기 위함
 
@@ -492,7 +508,7 @@ namespace namespace_json_2 {
 		throw std::out_of_range("비정상적인 종료");
 	}
 
-	JArray* JArray::Parse(std::istringstream& is)
+	JArray* JArray::Parse(std::istream& is)
 	{
 		auto arr = new JArray();
 		
@@ -502,7 +518,7 @@ namespace namespace_json_2 {
 
 		SkipSpaces(is);
 
-		std::istringstream::char_type c;
+		std::istream::char_type c;
 		while (is.get(c))
 		{
 			is.unget();
@@ -546,7 +562,7 @@ namespace namespace_json_2 {
 		return arr;
 	}
 
-	JObject* JObject::Parse(std::istringstream& is)
+	JObject* JObject::Parse(std::istream& is)
 	{
 		auto obj = new JObject();
 
@@ -555,7 +571,7 @@ namespace namespace_json_2 {
 		}
 		SkipSpaces(is);
 
-		std::istringstream::char_type c;
+		std::istream::char_type c;
 		while (is.get(c))
 		{
 			is.unget();
@@ -604,13 +620,13 @@ namespace namespace_json_2 {
 		return obj;
 	}
 
-	JLiteral* JLiteral::Parse(std::istringstream& is)
+	JLiteral* JLiteral::Parse(std::istream& is)
 	{
 		const std::string str_true = "true", str_false = "false", str_null = "null";
 		const std::string* cu;
 		std::function<JLiteral* (void)> fac;
 		size_t idx = 1;
-		std::istringstream::char_type c;
+		std::istream::char_type c;
 		if (is.get(c))
 		{
 			switch (c) {
@@ -695,13 +711,5 @@ namespace namespace_json_2 {
 	static bool CompareFloats(const JFloat& x, const JFloat& y)
 	{
 		return std::abs(x - y) < CompareError;
-	}
-
-	std::ostream& operator<<(std::ostream& os, const JValue* v) {
-		return os << v->Repr();
-	}
-
-	std::ostream& operator<<(std::ostream& os, const JValue& v) {
-		return os << v.Repr();
 	}
 }

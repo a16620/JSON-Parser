@@ -6,6 +6,13 @@
 #include <string>
 #include <map>
 
+#ifdef FAST_CONV
+
+#define JOB(p) ((JObject*)p)
+#define JNUM(p) ((JNumber*)p)
+
+#endif
+
 namespace namespace_json_2 {
 	enum class VALUE_TYPE {
 		JLITERAL,
@@ -51,28 +58,47 @@ namespace namespace_json_2 {
 	static bool CompareFloats(const JFloat& x, const JFloat& y);
 
 	class JNumber : public JValue {
-		JFloat fVal;
+		bool isFloat;
+		union {
+			int iVal;
+			JFloat fVal;
+		};
 	public:
 		JNumber() noexcept : JValue(VALUE_TYPE::NUMBER), fVal(0) {}
-		JNumber(const JFloat& v) noexcept : JValue(VALUE_TYPE::NUMBER), fVal(v) {}
+		JNumber(const JFloat& v) noexcept : JValue(VALUE_TYPE::NUMBER), fVal(v), isFloat(true) {}
+		JNumber(const int& v) noexcept : JValue(VALUE_TYPE::NUMBER), iVal(v), isFloat(false) {}
 		JNumber(const JNumber& o) noexcept : JValue(VALUE_TYPE::NUMBER), fVal{o.fVal} {}
+
+		void Set(const int& v) noexcept
+		{
+			isFloat = false;
+			iVal = v;
+		}
 
 		void Set(const JFloat& v) noexcept
 		{
+			isFloat = true;
 			fVal = v;
 		}
-		template<typename number>
-		JNumber& operator=(const number& v) noexcept
+
+		JNumber& operator=(const int& v) noexcept
 		{
-			fVal = static_cast<JFloat>(v);
+			isFloat = false;
+			iVal = v;
+		}
+
+		JNumber& operator=(const JFloat& v) noexcept
+		{
+			isFloat = true;
+			fVal = v;
 		}
 
 		operator JFloat() const noexcept {
-			return fVal;
+			return isFloat ? fVal : static_cast<JFloat>(iVal);
 		}
 		operator int() const noexcept
 		{
-			return static_cast<int>(fVal);
+			return isFloat ? static_cast<int>(fVal) : iVal;
 		}
 
 		std::ostream& Repr(std::ostream& os) const override
@@ -266,7 +292,7 @@ namespace namespace_json_2 {
 			}
 			const std::string sep = ", ";
 			auto it = cbegin(), end = this->cend();
-			os << '{' << EscapeString(it->first) << ':' << it->second;
+			os << '{' << EscapeString(it->first) << ':' << it->second; ++it;
 			for (; it != end; ++it) {
 				os << sep << EscapeString(it->first) << ':' << it->second;
 			}
@@ -444,13 +470,44 @@ namespace namespace_json_2 {
 
 	JNumber* JNumber::Parse(std::istream& is)
 	{
-		double d;
-		is >> d;
-
-		if (is.fail())
+		std::string buf;
+		std::istream::char_type c = is.get();
+		if (!(c == '+' || c == '-' || isdigit(c))) //strict check
 			throw std::runtime_error("숫자 형식 오류");
+		buf += c; //+,- sign 처리
+		while (c = is.get(), isdigit(c)) {
+			buf += c;
+		}
 
-		return new JNumber(d);
+		bool isFloating = false;
+		if (c == '.') {
+			isFloating = true;
+			buf += c;
+			while (c = is.get(), isdigit(c)) {
+				buf += c;
+			}
+		}
+
+		if (c == 'e' || c == 'E') {
+			isFloating = true;
+			buf += c;
+			c = is.get();
+			if (!(c == '+' || c == '-' || isdigit(c))) //strict check
+				throw std::runtime_error("숫자 형식 오류");
+			buf += c; //+, - sign 처리
+			while (c = is.get(), isdigit(c)) {
+				buf += c;
+			}
+		}
+		is.unget();
+		
+		if (isFloating) {
+			JFloat d = std::atof(buf.c_str());
+			return new JNumber(d);
+		} else {
+			int i = std::atoi(buf.c_str());
+			return new JNumber(i);
+		}
 	}
 
 	JString* JString::Parse(std::istream& is)
@@ -489,7 +546,7 @@ namespace namespace_json_2 {
 					c = '\t';
 					break;
 				case 'u':
-					str.push_back('\\');
+					str.push_back('\\'); //유니코드는 그대로
 					break;
 				}
 				str.push_back(c);
@@ -623,9 +680,8 @@ namespace namespace_json_2 {
 	JLiteral* JLiteral::Parse(std::istream& is)
 	{
 		const std::string str_true = "true", str_false = "false", str_null = "null";
-		const std::string* cu;
-		std::function<JLiteral* (void)> fac;
-		size_t idx = 1;
+		const std::string* cu; //current checking token
+		std::function<JLiteral* (void)> fac; //lazy allocation
 		std::istream::char_type c;
 		if (is.get(c))
 		{
@@ -656,13 +712,15 @@ namespace namespace_json_2 {
 			throw std::runtime_error("비정상적 종료 또는 스트림 읽기 실패");
 		}
 		
-		while (is.get(c) && std::isalpha(c)) { //or std::isalnum
-			if ((*cu)[idx++] != c) { //symbol이 모두 다르기 때문에
+		const auto c_length = cu->length();
+		size_t idx = 1;
+		while (is.get(c) && isalpha(c)) {
+			if (idx >= c_length || (*cu)[idx++] != c) { //symbol이 모두 다르기 때문에
 				throw std::runtime_error("매칭되는 리터럴 없음");
 			}
 		}
 
-		if (idx != cu->length()) {
+		if (idx != c_length) {
 			throw std::runtime_error("매칭되는 리터럴 없음");
 		}
 

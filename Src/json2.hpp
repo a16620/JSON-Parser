@@ -6,10 +6,14 @@
 #include <string>
 #include <map>
 
-#ifdef FAST_CONV
+#ifndef XFAST_CONV
 
-#define JOB(p) ((JObject*)p)
-#define JNUM(p) ((JNumber*)p)
+#define JLI(p)	(*static_cast<JLiteral*>(p))
+#define JNM(p)	(*static_cast<JNumber*>(p))
+#define JST(p)	(*static_cast<JString*>(p))
+#define JAR(p)	(*static_cast<JArray*>(p))
+#define JOB(p)	(*static_cast<JObject*>(p))
+
 
 #endif
 
@@ -64,10 +68,10 @@ namespace namespace_json_2 {
 			JFloat fVal;
 		};
 	public:
-		JNumber() noexcept : JValue(VALUE_TYPE::NUMBER), fVal(0) {}
+		JNumber() noexcept : JValue(VALUE_TYPE::NUMBER), iVal(0), isFloat(false) {}
 		JNumber(const JFloat& v) noexcept : JValue(VALUE_TYPE::NUMBER), fVal(v), isFloat(true) {}
 		JNumber(const int& v) noexcept : JValue(VALUE_TYPE::NUMBER), iVal(v), isFloat(false) {}
-		JNumber(const JNumber& o) noexcept : JValue(VALUE_TYPE::NUMBER), fVal{o.fVal} {}
+		JNumber(const JNumber& o) noexcept : JValue(VALUE_TYPE::NUMBER), fVal{ o.fVal } {}
 
 		void Set(const int& v) noexcept
 		{
@@ -85,12 +89,15 @@ namespace namespace_json_2 {
 		{
 			isFloat = false;
 			iVal = v;
+			return *this;
+
 		}
 
 		JNumber& operator=(const JFloat& v) noexcept
 		{
 			isFloat = true;
 			fVal = v;
+			return *this;
 		}
 
 		operator JFloat() const noexcept {
@@ -103,7 +110,7 @@ namespace namespace_json_2 {
 
 		std::ostream& Repr(std::ostream& os) const override
 		{
-			os << fVal;
+			os << (isFloat ? fVal : iVal);
 			return os;
 		}
 
@@ -330,7 +337,7 @@ namespace namespace_json_2 {
 		int flag;
 		const int mask_null = 1, mask_bool = 2;
 	public:
-		JLiteral() : JValue(VALUE_TYPE::JLITERAL), flag{0}
+		JLiteral() : JValue(VALUE_TYPE::JLITERAL), flag{ 0 }
 		{
 			//memset(&flag, 0, sizeof(int));
 			flag |= mask_null;
@@ -338,7 +345,7 @@ namespace namespace_json_2 {
 
 		JLiteral(const JLiteral& o) : JValue(VALUE_TYPE::JLITERAL), flag{ o.flag } {}
 
-		JLiteral(bool b) : JValue(VALUE_TYPE::JLITERAL), flag{0}
+		JLiteral(bool b) : JValue(VALUE_TYPE::JLITERAL), flag{ 0 }
 		{
 			//memset(&flag, 0, sizeof(int));
 			flag |= !!b << 1;
@@ -380,12 +387,12 @@ namespace namespace_json_2 {
 			if (IsNull())
 				os << "null";
 			else
-				os <<  Bool() ? "true" : "false";
+				os << (Bool() ? "true" : "false");
 			return os;
 		}
 		JValue* Clone() const override
 		{
-			return new JLiteral(*this); 
+			return new JLiteral(*this);
 		}
 		bool Equal(JValue* o) const override
 		{
@@ -410,7 +417,7 @@ namespace namespace_json_2 {
 	static void SkipSpaces(std::istream& is)
 	{
 		std::istream::char_type c;
-		while (is >> c) {
+		while (is.get(c)) {
 			switch (c)
 			{
 			case ' ':
@@ -500,11 +507,12 @@ namespace namespace_json_2 {
 			}
 		}
 		is.unget();
-		
+
 		if (isFloating) {
 			JFloat d = std::atof(buf.c_str());
 			return new JNumber(d);
-		} else {
+		}
+		else {
 			int i = std::atoi(buf.c_str());
 			return new JNumber(i);
 		}
@@ -568,7 +576,7 @@ namespace namespace_json_2 {
 	JArray* JArray::Parse(std::istream& is)
 	{
 		auto arr = new JArray();
-		
+
 		if (is.get() != '[') {
 			is.unget();
 		}
@@ -667,7 +675,7 @@ namespace namespace_json_2 {
 					break;
 				}
 				else {
-					throw std::runtime_error("불완전한 배열");
+					throw std::runtime_error("불완전한 객체");
 				}
 			}
 			else {
@@ -711,7 +719,7 @@ namespace namespace_json_2 {
 		else {
 			throw std::runtime_error("비정상적 종료 또는 스트림 읽기 실패");
 		}
-		
+
 		const auto c_length = cu->length();
 		size_t idx = 1;
 		while (is.get(c) && isalpha(c)) {
@@ -723,6 +731,8 @@ namespace namespace_json_2 {
 		if (idx != c_length) {
 			throw std::runtime_error("매칭되는 리터럴 없음");
 		}
+
+		is.unget();
 
 		return fac();
 	}
@@ -769,5 +779,41 @@ namespace namespace_json_2 {
 	static bool CompareFloats(const JFloat& x, const JFloat& y)
 	{
 		return std::abs(x - y) < CompareError;
+	}
+
+	JValue* find(JValue* org, const std::string& select, char delim = '.') {
+		std::vector<std::string> path;
+		std::istringstream str(select);
+		std::ostringstream os;
+
+		char a;
+		while (str >> a) {
+			if (a == delim) {
+				path.push_back(os.str());
+				os.str("");
+				os.clear();
+			}
+			else if (a == '\'' || a == '"') {
+				os << JString::ParseString(str);
+			}
+			else {
+				os << a;
+			}
+		}
+		path.push_back(os.str());
+		
+		for (const auto& p : path) {
+			if (org->type == VALUE_TYPE::OBJECT)
+				org = static_cast<JObject*>(org)->at(p);
+			else if (org->type == VALUE_TYPE::ARRAY) {
+				size_t idx = std::stoi(p);
+				org = static_cast<JArray*>(org)->at(idx);
+			}
+			else {
+				return org;
+			}
+		}
+
+		return org;
 	}
 }

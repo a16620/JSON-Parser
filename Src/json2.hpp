@@ -59,8 +59,6 @@ namespace namespace_json_2 {
 	}
 
 	using JFloat = double;
-	static bool CompareFloats(const JFloat& x, const JFloat& y);
-
 	class JNumber : public JValue {
 		bool isFloat;
 		union {
@@ -71,7 +69,7 @@ namespace namespace_json_2 {
 		JNumber() noexcept : JValue(VALUE_TYPE::NUMBER), iVal(0), isFloat(false) {}
 		JNumber(const JFloat& v) noexcept : JValue(VALUE_TYPE::NUMBER), fVal(v), isFloat(true) {}
 		JNumber(const int& v) noexcept : JValue(VALUE_TYPE::NUMBER), iVal(v), isFloat(false) {}
-		JNumber(const JNumber& o) noexcept : JValue(VALUE_TYPE::NUMBER), fVal{ o.fVal } {}
+		JNumber(const JNumber& o) noexcept : JValue(VALUE_TYPE::NUMBER), fVal{ o.fVal }, isFloat(o.isFloat) {}
 
 		void Set(const int& v) noexcept
 		{
@@ -129,6 +127,12 @@ namespace namespace_json_2 {
 		JValue* Clone() const override
 		{
 			return new JNumber(*this);
+		}
+		
+		static bool CompareFloats(const JFloat& x, const JFloat& y)
+		{
+			const JFloat CompareError = 1e-3;
+			return std::abs(x - y) < CompareError;
 		}
 
 		static JNumber* Parse(std::istream& is);
@@ -417,28 +421,21 @@ namespace namespace_json_2 {
 	static void SkipSpaces(std::istream& is)
 	{
 		std::istream::char_type c;
-		while (is.get(c)) {
-			switch (c)
-			{
-			case ' ':
-			case '\t':
-			case '\r':
-			case '\n':
-				break;
-			default:
-				is.unget();
-				return;
-			}
-		}
+		while (is.get(c) && std::isspace(c));
+		is.unget();
+	}
+
+	static auto ReadSkipSpaces(std::istream& is)
+	{
+		std::istream::char_type c;
+		while (is.get(c) && std::isspace(c));
+		return c;
 	}
 
 	JValue* JValue::Parse(std::istream& is)
 	{
-		SkipSpaces(is);
-
 		JValue* v = nullptr;
-		auto c = is.get();
-		is.unget();
+		auto c = ReadSkipSpaces(is); is.unget();
 		switch (c) {
 			//string
 		case '"':
@@ -479,8 +476,11 @@ namespace namespace_json_2 {
 	{
 		std::string buf;
 		std::istream::char_type c = is.get();
+		
+#ifdef PARSE_STRICT_CHECK
 		if (!(c == '+' || c == '-' || isdigit(c))) //strict check
 			throw std::runtime_error("숫자 형식 오류");
+#endif
 		buf += c; //+,- sign 처리
 		while (c = is.get(), isdigit(c)) {
 			buf += c;
@@ -499,14 +499,16 @@ namespace namespace_json_2 {
 			isFloating = true;
 			buf += c;
 			c = is.get();
+#ifdef PARSE_STRICT_CHECK
 			if (!(c == '+' || c == '-' || isdigit(c))) //strict check
 				throw std::runtime_error("숫자 형식 오류");
+#endif
 			buf += c; //+, - sign 처리
 			while (c = is.get(), isdigit(c)) {
 				buf += c;
 			}
 		}
-		is.unget();
+		is.unget(); //숫자 표현식 뒤의 문자
 
 		if (isFloating) {
 			JFloat d = std::atof(buf.c_str());
@@ -527,12 +529,14 @@ namespace namespace_json_2 {
 	std::string JString::ParseString(std::istream& is)
 	{
 		constexpr char escaper = '\\';
-		std::istream::char_type c, quot;
+		std::istream::char_type c, quot = is.get();
+#ifdef PARSE_STRICT_CHECK
+		if (quot != '"' && quot != '\'')
+			throw std::runtime_error("문자열은 반드시 '또는 \"로 시작해야 합니다");
+#endif
 		bool escaping = false;
-		is.get(quot); //single quot를 지원하기 위함
 
 		std::string str;
-
 		while (is.get(c))
 		{
 			if (escaping)
@@ -577,50 +581,47 @@ namespace namespace_json_2 {
 	{
 		auto arr = new JArray();
 
-		if (is.get() != '[') {
+#ifdef PARSE_STRICT_CHECK
+		if (is.get() != '[')
+			throw std::runtime_error("배열은 '['로 시작해야 합니다");
+#else
+		if (is.get() != '[') //파싱 전 배열 시작 제거
 			is.unget();
-		}
-
-		SkipSpaces(is);
+#endif
 
 		std::istream::char_type c;
-		while (is.get(c))
+		while (is.good())
 		{
-			is.unget();
 			JValue* v = nullptr;
+			SkipSpaces(is);
 			try {
 				v = JValue::Parse(is);
-
 				arr->push_back(v);
-				SkipSpaces(is);
 			}
 			catch (std::exception e)
 			{
-				if (v) {
+				if (v)
 					delete v;
-				}
+
 				delete arr;
 				throw e;
 			}
 
-			SkipSpaces(is);
-
-			if (is.get(c))
+			if (is.good())
 			{
-				if (c == ',') {
-					SkipSpaces(is);
-					continue;
-				}
-				else if (c == ']')
+				c = ReadSkipSpaces(is);
+				if (c == ']')
 				{
 					break;
 				}
-				else {
+				else if (c != ',') {
+					delete arr;
 					throw std::runtime_error("불완전한 배열");
 				}
 			}
 			else {
-				throw std::runtime_error("비정상적인 종료");
+				delete arr;
+				throw std::runtime_error("비정상적 스트림 종료");
 			}
 		}
 
@@ -631,55 +632,52 @@ namespace namespace_json_2 {
 	{
 		auto obj = new JObject();
 
-		if (is.get() != '{') {
+#ifdef PARSE_STRICT_CHECK
+		if (is.get() != '{')
+			throw std::runtime_error("객체는 '{'로 시작해야 합니다");
+#else
+		if (is.get() != '{') //파싱 전 객체 시작 제거
 			is.unget();
-		}
-		SkipSpaces(is);
+#endif
 
-		std::istream::char_type c;
-		while (is.get(c))
+		
+		while (is.good())
 		{
-			is.unget();
 			JValue* v = nullptr;
+			SkipSpaces(is);
 			try {
 				const std::string& key = JString::ParseString(is);
 
-				SkipSpaces(is);
-				if (!is.get(c) || c != ':') {
+				if (ReadSkipSpaces(is) != ':')
 					throw std::runtime_error("':' 없음");
-				}
-				SkipSpaces(is);
 
+				SkipSpaces(is);
 				v = JValue::Parse(is);
 
 				obj->Set(key, v);
 			}
 			catch (std::runtime_error e)
 			{
-				if (v) {
+				if (v)
 					delete v;
-				}
+
 				delete obj;
 				throw e;
 			}
 
-			SkipSpaces(is);
-			if (is.get(c))
+			if (is.good())
 			{
-				if (c == ',') {
-					SkipSpaces(is);
-					continue;
-				}
-				else if (c == '}')
-				{
+				auto c = ReadSkipSpaces(is);
+				if (c == '}')
 					break;
-				}
-				else {
+				else if (c != ',') {
+					delete obj;
 					throw std::runtime_error("불완전한 객체");
 				}
 			}
 			else {
-				throw std::runtime_error("비정상적인 종료");
+				delete obj;
+				throw std::runtime_error("비정상적 스트림 종료");
 			}
 		}
 		return obj;
@@ -689,58 +687,53 @@ namespace namespace_json_2 {
 	{
 		const std::string str_true = "true", str_false = "false", str_null = "null";
 		const std::string* cu; //current checking token
-		std::function<JLiteral* (void)> fac; //lazy allocation
-		std::istream::char_type c;
-		if (is.get(c))
+		JLiteral* ret = nullptr;
+		if (is.good())
 		{
-			switch (c) {
+			switch (is.get()) {
 			case 't':
 				cu = &str_true;
-				fac = []() {
-					return new JLiteral(true);
-				};
+				ret = new JLiteral(true);
 				break;
 			case 'f':
 				cu = &str_false;
-				fac = []() {
-					return new JLiteral(false);
-				};
+				ret = new JLiteral(false);
 				break;
 			case 'n':
 				cu = &str_null;
-				fac = []() {
-					return new JLiteral();
-				};
+				ret = new JLiteral();
 				break;
 			default:
 				throw std::runtime_error("정의되지 않은 토큰");
 			}
 		}
 		else {
-			throw std::runtime_error("비정상적 종료 또는 스트림 읽기 실패");
+			throw std::runtime_error("비정상적 스트림 종료");
 		}
 
-		const auto c_length = cu->length();
-		size_t idx = 1;
+		std::istream::char_type c;
+		size_t c_length = cu->length(), idx = 1;
 		while (is.get(c) && isalpha(c)) {
 			if (idx >= c_length || (*cu)[idx++] != c) { //symbol이 모두 다르기 때문에
+				delete ret;
 				throw std::runtime_error("매칭되는 리터럴 없음");
 			}
 		}
 
 		if (idx != c_length) {
+			delete ret;
 			throw std::runtime_error("매칭되는 리터럴 없음");
 		}
 
-		is.unget();
+		is.unget(); //리터럴 뒤에 붙은 문자
 
-		return fac();
+		return ret;
 	}
 
 	static std::string EscapeString(const std::string& s)
 	{
 		std::ostringstream oss;
-		oss << "\"";
+		oss << '"';
 		for (const auto& c : s) {
 			switch (c) {
 			case '"':
@@ -771,14 +764,8 @@ namespace namespace_json_2 {
 				oss << c;
 			}
 		}
-		oss << "\"";
+		oss << '"';
 		return oss.str();
-	}
-
-	constexpr JFloat CompareError = 1e-3;
-	static bool CompareFloats(const JFloat& x, const JFloat& y)
-	{
-		return std::abs(x - y) < CompareError;
 	}
 
 	JValue* find(JValue* org, const std::string& select, char delim = '.') {
@@ -810,7 +797,7 @@ namespace namespace_json_2 {
 				org = static_cast<JArray*>(org)->at(idx);
 			}
 			else {
-				return org;
+				break;
 			}
 		}
 

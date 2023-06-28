@@ -586,27 +586,36 @@ namespace namespace_json_2 {
 		{
 			if (escaping)
 			{
-				switch (c) {
-				case 'b':
-					c = '\b';
-					break;
-				case 'f':
-					c = '\f';
-					break;
-				case 'n':
-					c = '\n';
-					break;
-				case 'r':
-					c = '\r';
-					break;
-				case 't':
-					c = '\t';
-					break;
-				case 'u':
-					str.push_back('\\'); //유니코드는 그대로
-					break;
+				if (c == 'u') {
+					char hex[5] = { 0 };
+					if (!is.read(hex, 4))
+						throw JSONLIB_THROW_ERROR("비정상적 스트림 종료");
+
+					wchar_t wc = ::strtol(hex, NULL, 16);
+					char buff[5] = { 0 };
+					if (wctomb(buff, wc) == -1)
+						throw JSONLIB_THROW_ERROR("setlocale(LC_CTYPE, \"\")");
+					str.append(buff);
+				} else {
+					switch (c) {
+					case 'b':
+						c = '\b';
+						break;
+					case 'f':
+						c = '\f';
+						break;
+					case 'n':
+						c = '\n';
+						break;
+					case 'r':
+						c = '\r';
+						break;
+					case 't':
+						c = '\t';
+						break;
+					}
+					str.push_back(c);
 				}
-				str.push_back(c);
 				escaping = false;
 				continue;
 			}

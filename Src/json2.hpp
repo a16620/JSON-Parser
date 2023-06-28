@@ -98,12 +98,21 @@ namespace namespace_json_2 {
 			return *this;
 		}
 
-		operator JFloat() const noexcept {
+		JFloat asFloat() const noexcept {
 			return isFloat ? fVal : static_cast<JFloat>(iVal);
 		}
+
+		int asInt() const noexcept {
+			return isFloat ? static_cast<int>(fVal) : iVal;
+		}
+
+		operator JFloat() const noexcept {
+			return asFloat();
+		}
+
 		operator int() const noexcept
 		{
-			return isFloat ? static_cast<int>(fVal) : iVal;
+			return asInt();
 		}
 
 		std::ostream& Repr(std::ostream& os) const override
@@ -122,7 +131,10 @@ namespace namespace_json_2 {
 			}
 
 			auto n = reinterpret_cast<JNumber*>(o);
-			return CompareFloats(fVal, n->fVal);
+			if (n->isFloat || isFloat)
+				return CompareFloats(asFloat(), n->asFloat());
+			else
+				return n->iVal == iVal;
 		}
 		JValue* Clone() const override
 		{
@@ -197,6 +209,8 @@ namespace namespace_json_2 {
 			auto it = find(begin(), end(), item);
 			if (it != end())
 			{
+				if (*it != item)
+					delete *it;
 				erase(it);
 			}
 		}
@@ -209,6 +223,7 @@ namespace namespace_json_2 {
 			auto it = find_if(begin(), end(), cmp);
 			if (it != end())
 			{
+				delete *it;
 				erase(it);
 			}
 		}
@@ -289,6 +304,16 @@ namespace namespace_json_2 {
 				it->second = v;
 			}
 		}
+
+		void Remove(const std::string& key) {
+			auto it = find(key);
+			if (it != end())
+			{
+				delete it->second;
+				erase(it);
+			}
+		}
+
 		bool Has(const std::string& key) const
 		{
 			return count(key);

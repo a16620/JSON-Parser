@@ -418,10 +418,27 @@ namespace namespace_json_2 {
 		static JLiteral* Parse(std::istream& is);
 	};
 
+	std::runtime_error json_parse_error(const char* call, const char* what, int position) {
+		std::ostringstream what_full;
+		const char* fn_name = call;
+		while (*call != '\0') { //namespace 제거
+			if (*(call++) == ':') {
+				fn_name = call + 1;
+				break;
+			}
+		}
+
+		what_full << '[' << fn_name << ':' << position << ']' << what;
+		return std::runtime_error(what_full.str());
+	}
+#define JSONLIB_THROW_ERROR(what) json_parse_error(__FUNCTION__, what, is.tellg())
+
 	static void SkipSpaces(std::istream& is)
 	{
 		std::istream::char_type c;
 		while (is.get(c) && std::isspace(c));
+		if (!is.good())
+			throw JSONLIB_THROW_ERROR("비정상적 스트림 종료");
 		is.unget();
 	}
 
@@ -429,6 +446,8 @@ namespace namespace_json_2 {
 	{
 		std::istream::char_type c;
 		while (is.get(c) && std::isspace(c));
+		if (!is.good())
+			throw JSONLIB_THROW_ERROR("비정상적 스트림 종료");
 		return c;
 	}
 
@@ -436,6 +455,7 @@ namespace namespace_json_2 {
 	{
 		JValue* v = nullptr;
 		auto c = ReadSkipSpaces(is); is.unget();
+
 		switch (c) {
 			//string
 		case '"':
@@ -464,7 +484,7 @@ namespace namespace_json_2 {
 				v = JLiteral::Parse(is);
 			}
 			else {
-				throw std::runtime_error("인식 불가");
+				throw JSONLIB_THROW_ERROR("인식 불가");
 			}
 		}
 		}
@@ -479,7 +499,7 @@ namespace namespace_json_2 {
 		
 #ifdef PARSE_STRICT_CHECK
 		if (!(c == '+' || c == '-' || isdigit(c))) //strict check
-			throw std::runtime_error("숫자 형식 오류");
+			throw JSONLIB_THROW_ERROR("숫자 형식 오류");
 #endif
 		buf += c; //+,- sign 처리
 		while (c = is.get(), isdigit(c)) {
@@ -501,7 +521,7 @@ namespace namespace_json_2 {
 			c = is.get();
 #ifdef PARSE_STRICT_CHECK
 			if (!(c == '+' || c == '-' || isdigit(c))) //strict check
-				throw std::runtime_error("숫자 형식 오류");
+				throw JSONLIB_THROW_ERROR("숫자 형식 오류");
 #endif
 			buf += c; //+, - sign 처리
 			while (c = is.get(), isdigit(c)) {
@@ -532,7 +552,7 @@ namespace namespace_json_2 {
 		std::istream::char_type c, quot = is.get();
 #ifdef PARSE_STRICT_CHECK
 		if (quot != '"' && quot != '\'')
-			throw std::runtime_error("문자열은 반드시 '또는 \"로 시작해야 합니다");
+			throw JSONLIB_THROW_ERROR("문자열은 반드시 '또는 \"로 시작해야 합니다");
 #endif
 		bool escaping = false;
 
@@ -574,7 +594,7 @@ namespace namespace_json_2 {
 		}
 
 		//quot 나오기 전에 스트림 종료->오류
-		throw std::out_of_range("비정상적인 종료");
+		throw JSONLIB_THROW_ERROR("문자열 끝이 없습니다");
 	}
 
 	JArray* JArray::Parse(std::istream& is)
@@ -583,7 +603,7 @@ namespace namespace_json_2 {
 
 #ifdef PARSE_STRICT_CHECK
 		if (is.get() != '[')
-			throw std::runtime_error("배열은 '['로 시작해야 합니다");
+			throw JSONLIB_THROW_ERROR("배열은 '['로 시작해야 합니다");
 #else
 		if (is.get() != '[') //파싱 전 배열 시작 제거
 			is.unget();
@@ -598,7 +618,7 @@ namespace namespace_json_2 {
 				v = JValue::Parse(is);
 				arr->push_back(v);
 			}
-			catch (std::exception e)
+			catch (std::exception& e)
 			{
 				if (v)
 					delete v;
@@ -616,12 +636,12 @@ namespace namespace_json_2 {
 				}
 				else if (c != ',') {
 					delete arr;
-					throw std::runtime_error("불완전한 배열");
+					throw JSONLIB_THROW_ERROR("불완전한 배열");
 				}
 			}
 			else {
 				delete arr;
-				throw std::runtime_error("비정상적 스트림 종료");
+				throw JSONLIB_THROW_ERROR("비정상적 스트림 종료");
 			}
 		}
 
@@ -634,7 +654,7 @@ namespace namespace_json_2 {
 
 #ifdef PARSE_STRICT_CHECK
 		if (is.get() != '{')
-			throw std::runtime_error("객체는 '{'로 시작해야 합니다");
+			throw JSONLIB_THROW_ERROR("객체는 '{'로 시작해야 합니다");
 #else
 		if (is.get() != '{') //파싱 전 객체 시작 제거
 			is.unget();
@@ -646,17 +666,24 @@ namespace namespace_json_2 {
 			JValue* v = nullptr;
 			SkipSpaces(is);
 			try {
-				const std::string& key = JString::ParseString(is);
-
-				if (ReadSkipSpaces(is) != ':')
-					throw std::runtime_error("':' 없음");
-
+				std::string key;
+				auto bg = is.peek();
+				if (bg == '\'' || bg == '"') {
+					key = JString::ParseString(is);
+					if (ReadSkipSpaces(is) != ':')
+						throw JSONLIB_THROW_ERROR("':' 없음");
+				}
+				else {
+					std::getline(is, key, ':');
+					if (is.eof())
+						throw JSONLIB_THROW_ERROR("':' 없음");
+				}
+				
 				SkipSpaces(is);
 				v = JValue::Parse(is);
-
 				obj->Set(key, v);
 			}
-			catch (std::runtime_error e)
+			catch (std::exception& e)
 			{
 				if (v)
 					delete v;
@@ -672,12 +699,12 @@ namespace namespace_json_2 {
 					break;
 				else if (c != ',') {
 					delete obj;
-					throw std::runtime_error("불완전한 객체");
+					throw JSONLIB_THROW_ERROR("콤마 없이 다음 값을 읽을 수 없습니다");
 				}
 			}
 			else {
 				delete obj;
-				throw std::runtime_error("비정상적 스트림 종료");
+				throw JSONLIB_THROW_ERROR("[JObject::Parse] 비정상적 스트림 종료");
 			}
 		}
 		return obj;
@@ -704,11 +731,11 @@ namespace namespace_json_2 {
 				ret = new JLiteral();
 				break;
 			default:
-				throw std::runtime_error("정의되지 않은 토큰");
+				throw JSONLIB_THROW_ERROR("정의되지 않은 토큰");
 			}
 		}
 		else {
-			throw std::runtime_error("비정상적 스트림 종료");
+			throw JSONLIB_THROW_ERROR("비정상적 스트림 종료");
 		}
 
 		std::istream::char_type c;
@@ -716,13 +743,13 @@ namespace namespace_json_2 {
 		while (is.get(c) && isalpha(c)) {
 			if (idx >= c_length || (*cu)[idx++] != c) { //symbol이 모두 다르기 때문에
 				delete ret;
-				throw std::runtime_error("매칭되는 리터럴 없음");
+				throw JSONLIB_THROW_ERROR("매칭되는 리터럴 없음");
 			}
 		}
 
 		if (idx != c_length) {
 			delete ret;
-			throw std::runtime_error("매칭되는 리터럴 없음");
+			throw JSONLIB_THROW_ERROR("매칭되는 리터럴 없음");
 		}
 
 		is.unget(); //리터럴 뒤에 붙은 문자
@@ -768,15 +795,15 @@ namespace namespace_json_2 {
 		return oss.str();
 	}
 
-	JValue* find(JValue* org, const std::string& select, char delim = '.') {
-		std::vector<std::string> path;
+	static std::vector<std::string> tokenize_selector(const std::string& select, char delim) {
 		std::istringstream str(select);
 		std::ostringstream os;
 
 		char a;
+		std::vector<std::string> token;
 		while (str >> a) {
 			if (a == delim) {
-				path.push_back(os.str());
+				token.push_back(os.str());
 				os.str("");
 				os.clear();
 			}
@@ -787,7 +814,13 @@ namespace namespace_json_2 {
 				os << a;
 			}
 		}
-		path.push_back(os.str());
+		token.push_back(os.str());
+
+		return token;
+	}
+
+	JValue* find(JValue* org, const std::string& select, char delim = '.') {
+		std::vector<std::string> path = tokenize_selector(select, delim);
 		
 		for (const auto& p : path) {
 			if (org->type == VALUE_TYPE::OBJECT)
@@ -802,5 +835,26 @@ namespace namespace_json_2 {
 		}
 
 		return org;
+	}
+
+	bool modify(JValue* root, const std::string& select, JValue* new_val, char delim = '.') {
+		std::vector<std::string> path = tokenize_selector(select, delim);
+
+		JValue** org = &root;
+		for (const auto& p : path) {
+			if ((*org)->type == VALUE_TYPE::OBJECT)
+				org = &static_cast<JObject*>(*org)->at(p);
+			else if ((*org)->type == VALUE_TYPE::ARRAY) {
+				size_t idx = std::stoi(p);
+				org = &static_cast<JArray*>(*org)->at(idx);
+			}
+			else {
+				return false;
+			}
+		}
+
+		delete *org;
+		*org = new_val;
+		return true;
 	}
 }

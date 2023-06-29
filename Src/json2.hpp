@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <algorithm>
 
 #ifndef XFAST_CONV
 
@@ -281,6 +282,10 @@ namespace namespace_json_2 {
 	};
 
 	class JObject : public JValue, public std::map<std::string, JValue*> {
+		static inline bool checkName(const std::string& name)
+		{
+			return std::all_of(name.cbegin(), name.cend(), std::isalpha);
+		}
 	public:
 		JObject() noexcept : JValue(VALUE_TYPE::OBJECT) {}
 		JObject(const JObject& o) : JValue(VALUE_TYPE::OBJECT) {}
@@ -328,9 +333,9 @@ namespace namespace_json_2 {
 			}
 			const std::string sep = ", ";
 			auto it = cbegin(), end = this->cend();
-			os << '{' << EscapeString(it->first) << ':' << it->second; ++it;
+			os << '{' << (checkName(it->first) ? it->first : EscapeString(it->first)) << ':' << it->second; ++it;
 			for (; it != end; ++it) {
-				os << sep << EscapeString(it->first) << ':' << it->second;
+				os << sep << (checkName(it->first) ? it->first : EscapeString(it->first)) << ':' << it->second;
 			}
 			os << '}';
 			return os;

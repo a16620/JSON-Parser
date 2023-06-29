@@ -333,9 +333,9 @@ namespace namespace_json_2 {
 			}
 			const std::string sep = ", ";
 			auto it = cbegin(), end = this->cend();
-			os << '{' << (checkName(it->first) ? it->first : EscapeString(it->first)) << ':' << it->second; ++it;
+			os << '{' << EscapeString(it->first) << ':' << it->second; ++it;
 			for (; it != end; ++it) {
-				os << sep << (checkName(it->first) ? it->first : EscapeString(it->first)) << ':' << it->second;
+				os << sep << EscapeString(it->first) << ':' << it->second;
 			}
 			os << '}';
 			return os;
